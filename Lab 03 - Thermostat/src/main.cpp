@@ -19,6 +19,8 @@
 #include <SPI.h>
 #include <Adafruit_Sensor.h>
 #include "Adafruit_BME680.h"
+#include <Adafruit_ST7789.h>
+#include <Arduino.h>
 
 #define BME_SCK 13
 #define BME_MISO 12
@@ -26,6 +28,9 @@
 #define BME_CS 10
 
 #define SEALEVELPRESSURE_HPA (1013.25)
+
+Adafruit_ST7789 display = Adafruit_ST7789(TFT_CS,TFT_DC,TFT_RST);
+GFXcanvas16 canvas(240,135);
 
 enum hvacState {
   Heating, // 0
@@ -50,7 +55,7 @@ hvacState opMode = Heating;
 menuState menuMode = TemperatureMenu;
 tempState unitMode = C;
 float targetTemp = 26.;
-float targetTempF = 26. * 9. / 5. + 32.;
+float targetTempF = targetTemp * 9. / 5. + 32.;
 volatile long prevChangeTime = 0;
 volatile long prevChangeTimeTwo = 0;
 long debounceTime = 50;
@@ -103,6 +108,11 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(2), buttonToChangeMenu, RISING);
 
   bme.setTemperatureOversampling(BME680_OS_2X);
+  display.init(135,240);
+  display.setRotation(1);
+  canvas.setTextColor(ST77XX_BLUE);
+  pinMode(TFT_BACKLITE,OUTPUT);
+  digitalWrite(TFT_BACKLITE,1);
 }
 
 
@@ -118,10 +128,10 @@ void loop() {
   Serial.print(currentTemp);
   if (unitMode == tempState::C) {
     Serial.print("*C");
-    }
+  }
   if (unitMode == tempState::F) {
     Serial.print("*F");
-    }
+  }
   Serial.print(" with target ");
   if (unitMode == tempState::C) {
     Serial.print(targetTemp);
@@ -132,9 +142,22 @@ void loop() {
     Serial.print("*F");
   }
   Serial.print(" operating in mode ");
-  Serial.print((int)opMode);
+  if (opMode == hvacState::Heating) {
+    Serial.print("heating");
+  }
+  if (opMode == hvacState::Cooling) {
+    Serial.print("cooling");
+  }
   Serial.print(" in menu ");
-  Serial.println(menuMode);
+  if (menuMode == menuState::TemperatureMenu) {
+    Serial.print("temperature change.");
+  }
+  if (menuMode == menuState::OperationMenu) {
+    Serial.print("heating/cooling menu.");
+  }
+    if (menuMode == menuState::UnitMenu) {
+    Serial.print("unit change.");
+  }
 
   if (menuButtonFlag) {
     menuButtonFlag = false;
@@ -193,6 +216,58 @@ void loop() {
     }
   }
  
+  canvas.fillScreen(ST77XX_WHITE);
+  canvas.setCursor(0,20);
+  if (menuMode == 0) {
+    float current_temp = getCurrentTemp();
+    canvas.println("Press to switch the set temperature.");
+    canvas.print("Current temperature: ");
+    canvas.print(current_temp);  
+    if (unitMode == tempState::C) {
+      canvas.println("*C.");
+    }
+    if (unitMode == tempState::F) {
+      canvas.println("*F.");
+    }
+    canvas.print("Target temperature: "); 
+    if (unitMode == tempState::C) {
+      canvas.print(targetTemp);
+      canvas.println("*C.");
+    }
+    if (unitMode == tempState::F) {
+      canvas.print(targetTempF);
+      canvas.println("*F.");
+    }
+    if (opMode == 0) {
+      canvas.print("You are currently operating in heating mode.");
+    }
+    if (opMode == 1) {
+      canvas.print("You are currently operating in cooling mode.");
+    } 
+  }
+  if (menuMode == 1) {
+      canvas.println("Press to switch between hVAC modes.");
+      canvas.print("Currently operating in: ");
+      if (opMode == 0) {
+        canvas.print("heating mode.");
+      }
+      if (opMode == 1) {
+        canvas.print("cooling mode.");
+      }
+  }
+  if (menuMode == 2) {
+      canvas.println("Press to switch between unit modes.");
+      canvas.print("Units are currently in: ");
+      if (unitMode == 0) {
+        canvas.print("Celcius.");
+      }
+      if (unitMode == 1) {
+        canvas.print("Fahrenheit.");
+      }
+  }
+
+  display.drawRGBBitmap(0,0, canvas.getBuffer(), 240, 135);
+
   Serial.println();
   delay(100);
 }
